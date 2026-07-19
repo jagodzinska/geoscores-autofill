@@ -79,7 +79,12 @@ auch wenn dort nicht gespielt wurde.
    heutigen Berlin-Tag → letzter Eintrag von `stats.usedGuesses` = Versuche;
    sonst leer (heute noch nicht gelöst).
 
-3. Antwort per Event `geoscores-autofill-antwort`, detail = JSON-String:
+3. Handshake: Das Userscript bestätigt den Empfang sofort per Event
+   `geoscores-autofill-empfangen` (detail: `{version}`), noch vor dem
+   Datenabruf – so unterscheidet das Formular „Skript läuft hier nicht"
+   (Warnung nach 2 s) von „Abruf hängt" (Fehler nach 12 s). Beide Seiten
+   loggen mit Präfix `[Geo-Autofill]` bzw. `[Autofill]` in die Konsole.
+4. Antwort per Event `geoscores-autofill-antwort`, detail = JSON-String:
    `{ ok, tag, welt: {wert,score,total}|null, europa, geoconnections,
    geodecide, geopaint, geodle, warnung? }` (bzw. `{ ok:false, fehler }`,
    wenn alle Abrufe scheitern).

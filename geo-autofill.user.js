@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.8.1
+// @version      0.8.2
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
@@ -28,6 +28,11 @@
   // in Firefox wegen der Sandbox-Grenze nicht lesbar auf der Seite an.
   const ANFRAGE = 'geoscores-autofill-anfrage';
   const ANTWORT = 'geoscores-autofill-antwort';
+  // Sofort-Bestätigung VOR dem Datenabruf: damit kann das Formular
+  // unterscheiden zwischen "Skript läuft hier gar nicht" und "Abruf dauert/hängt"
+  const EMPFANG = 'geoscores-autofill-empfangen';
+
+  console.log('[Geo-Autofill v' + GM_info.script.version + '] aktiv auf ' + location.hostname + ' (' + location.href + ')');
 
   // Jede geotrivia-Spielseite bettet nur ihr eigenes serverGameResult ein,
   // deshalb ein Abruf pro Spiel (laufen parallel).
@@ -381,10 +386,15 @@
   }
 
   function antworten(obj) {
+    console.log('[Geo-Autofill] Antwort ans Formular:', obj);
     window.dispatchEvent(new CustomEvent(ANTWORT, { detail: JSON.stringify(obj) }));
   }
 
   window.addEventListener(ANFRAGE, async function (ev) {
+    console.log('[Geo-Autofill] Anfrage vom Formular empfangen, hole Ergebnisse …');
+    window.dispatchEvent(new CustomEvent(EMPFANG, {
+      detail: JSON.stringify({ version: GM_info.script.version }),
+    }));
     const heute = heuteBerlin();
     let formularEmail = null;
     try {
