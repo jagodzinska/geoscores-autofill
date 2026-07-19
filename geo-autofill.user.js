@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.7.0
-// @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
+// @version      0.8.0
+// @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
 // @match        https://*.googleusercontent.com/*
 // @match        https://flagle-game.com/*
+// @match        https://flagpie.net/*
 // @match        https://globle-game.com/*
 // @match        https://mapster.teuteuf.fr/*
 // @match        https://travle.earth/*
@@ -72,6 +73,42 @@
       if (document.visibilityState === 'hidden') schnappschuss();
     });
     return; // auf der Spiel-Domain gibt es sonst nichts zu tun
+  }
+
+  // ---- Flagpie (flagpie.net): Schnappschuss ----
+  // flagpieGameState_<JJJJMMTT> = {guessesUsed, isOver, isWon, ...}.
+  // (Es gäbe ein Supabase-Backend, aber dessen Access-Token läuft stündlich
+  // ab – der Schnappschuss ist robuster.)
+  if (location.hostname === 'flagpie.net') {
+    const sichern = function () {
+      try {
+        const heute = heuteBerlin();
+        const spiel = JSON.parse(localStorage.getItem('flagpieGameState_' + heute.replace(/-/g, '')) || 'null');
+        if (spiel && spiel.isOver) {
+          GM_setValue('flagpie', {
+            tag: heute,
+            versuche: spiel.guessesUsed,
+            gewonnen: !!spiel.isWon,
+            stand: Date.now(),
+          });
+        }
+      } catch (e) { /* defekter State – nächstes Ereignis versucht es erneut */ }
+    };
+    sichern();
+    window.addEventListener('blur', sichern);
+    window.addEventListener('pagehide', sichern);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') sichern();
+    });
+    return;
+  }
+
+  // Flagpie-Konvention: gewonnen → Versuche (1–5); verloren → 6
+  // (5 echte Versuche, der 6. Formularwert ist der Verloren-Fall)
+  function flagpieErgebnis(heute) {
+    const s = GM_getValue('flagpie', null);
+    if (!s || s.tag !== heute) return null;
+    return { wert: s.gewonnen ? s.versuche : 6 };
   }
 
   // ---- Travle (travle.earth): Schnappschuss wie Flagle/Mapster ----
@@ -358,6 +395,7 @@
       welt: null, europa: null, geoconnections: null,
       geodecide: null, geopaint: null, geodle: null,
       flagle: flagleErgebnis(heute),
+      flagpie: flagpieErgebnis(heute),
       mapster: mapsterErgebnis(heute),
       travle: travleErgebnis(heute),
       geozee: geozeeErgebnis(heute),

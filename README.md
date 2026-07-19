@@ -54,6 +54,12 @@ auch wenn dort nicht gespielt wurde.
    (Direkter API-Abruf wäre `auth.teuteuf.fr/api/getdata`, ist aber nicht
    per einfachem GET zugänglich – 404, vermutlich POST + Token.)
 
+   **Flagpie** (flagpie.net): Schnappschuss-Brücke.
+   `flagpieGameState_<JJJJMMTT>` mit `isOver:true`; Wert = `guessesUsed`
+   bei Sieg, **6** bei Niederlage (5 echte Versuche, der 6. Formularwert
+   ist der Verloren-Fall). Supabase-Backend existiert, aber der
+   Access-Token läuft stündlich ab → localStorage ist robuster.
+
    **Travle** (travle.earth): Schnappschuss-Brücke. Heutiges Spiel =
    `travle-past-games`-Eintrag mit `gameId == puzzleIx` aus
    `travle-game-state` (Archiv-Modus wird ignoriert; Anker: puzzleIx 1313 =
