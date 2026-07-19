@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.8.2
+// @version      0.9.0
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
 // @homepageURL  https://greasyfork.org/de/scripts/587742-geo-scores-autofill
+// @match        https://script.google.com/*
 // @match        https://*.googleusercontent.com/*
 // @match        https://flagle-game.com/*
 // @match        https://flagpie.net/*
@@ -390,16 +391,10 @@
     window.dispatchEvent(new CustomEvent(ANTWORT, { detail: JSON.stringify(obj) }));
   }
 
-  window.addEventListener(ANFRAGE, async function (ev) {
-    console.log('[Geo-Autofill] Anfrage vom Formular empfangen, hole Ergebnisse …');
-    window.dispatchEvent(new CustomEvent(EMPFANG, {
-      detail: JSON.stringify({ version: GM_info.script.version }),
-    }));
+  // Kernlogik, von beiden Kanälen genutzt: Ergebnisse einsammeln und
+  // fertiges Antwort-Objekt liefern
+  async function anfrageBearbeiten(formularEmail) {
     const heute = heuteBerlin();
-    let formularEmail = null;
-    try {
-      formularEmail = (JSON.parse(ev.detail || 'null') || {}).email || null;
-    } catch (e) { /* alte Formular-Version ohne detail */ }
 
     const daten = {
       ok: true, tag: heute,
@@ -429,10 +424,43 @@
     await Promise.all(aufgaben);
 
     if (fehler.length >= aufgaben.length) {
-      antworten({ ok: false, fehler: fehler.join(' / ') });
-      return;
+      return { ok: false, fehler: fehler.join(' / ') };
     }
     if (fehler.length > 0) daten.warnung = fehler.join(' / ');
-    antworten(daten);
+    return daten;
+  }
+
+  function emailAusDetail(detail) {
+    try {
+      return (JSON.parse(detail || 'null') || {}).email || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Kanal 1: DOM-Events – funktioniert nur, wenn diese Skript-Instanz im
+  // selben Frame wie das Formular läuft (Tampermonkey injiziert die
+  // verschachtelten Apps-Script-Sandbox-iframes nicht immer zuverlässig).
+  window.addEventListener(ANFRAGE, async function (ev) {
+    console.log('[Geo-Autofill] Event-Anfrage vom Formular empfangen, hole Ergebnisse …');
+    window.dispatchEvent(new CustomEvent(EMPFANG, {
+      detail: JSON.stringify({ version: GM_info.script.version, kanal: 'event' }),
+    }));
+    antworten(await anfrageBearbeiten(emailAusDetail(ev.detail)));
+  });
+
+  // Kanal 2: postMessage-Relay – das Formular schickt die Anfrage an
+  // window.top (script.google.com, wird immer zuverlässig injiziert), diese
+  // Instanz antwortet dem anfragenden Frame direkt über ev.source.
+  // targetOrigin '*', weil der sandboxte Formular-Frame eine opake Origin hat.
+  window.addEventListener('message', function (ev) {
+    const d = ev.data;
+    if (!d || d.geoscores !== 'anfrage' || !ev.source) return;
+    console.log('[Geo-Autofill] postMessage-Anfrage empfangen (in ' + location.hostname + '), hole Ergebnisse …');
+    ev.source.postMessage({ geoscores: 'empfangen', version: GM_info.script.version, kanal: 'postMessage' }, '*');
+    anfrageBearbeiten(d.email || null).then(function (antwort) {
+      console.log('[Geo-Autofill] postMessage-Antwort ans Formular:', antwort);
+      ev.source.postMessage({ geoscores: 'antwort', daten: antwort }, '*');
+    });
   });
 })();

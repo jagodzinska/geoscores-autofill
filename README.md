@@ -79,11 +79,21 @@ auch wenn dort nicht gespielt wurde.
    heutigen Berlin-Tag → letzter Eintrag von `stats.usedGuesses` = Versuche;
    sonst leer (heute noch nicht gelöst).
 
-3. Handshake: Das Userscript bestätigt den Empfang sofort per Event
-   `geoscores-autofill-empfangen` (detail: `{version}`), noch vor dem
-   Datenabruf – so unterscheidet das Formular „Skript läuft hier nicht"
-   (Warnung nach 2 s) von „Abruf hängt" (Fehler nach 12 s). Beide Seiten
-   loggen mit Präfix `[Geo-Autofill]` bzw. `[Autofill]` in die Konsole.
+3. Handshake: Das Userscript bestätigt den Empfang sofort (`…-empfangen`
+   bzw. `{geoscores:"empfangen"}`), noch vor dem Datenabruf – so
+   unterscheidet das Formular „Skript läuft hier nicht" (Warnung nach 2 s)
+   von „Abruf hängt" (Fehler nach 12 s). Beide Seiten loggen mit Präfix
+   `[Geo-Autofill]` bzw. `[Autofill]` in die Konsole.
+
+   **Zwei Transportkanäle** (seit v0.9.0): DOM-Events funktionieren nur,
+   wenn Tampermonkey den verschachtelten Apps-Script-Sandbox-iframe des
+   Formulars injiziert – auf /exec passiert das nicht zuverlässig (Skript
+   landet nur in Nachbar-Frames). Deshalb schickt das Formular die Anfrage
+   zusätzlich per `window.top.postMessage({geoscores:"anfrage", email}, "*")`
+   an script.google.com (immer injizierbar); die dortige Instanz antwortet
+   über `ev.source.postMessage` direkt in den Formular-Frame (targetOrigin
+   `*`, weil der Sandbox-Frame eine opake Origin hat). Doppelte Antworten
+   fängt der Timer-Guard im Formular ab.
 4. Antwort per Event `geoscores-autofill-antwort`, detail = JSON-String:
    `{ ok, tag, welt: {wert,score,total}|null, europa, geoconnections,
    geodecide, geopaint, geodle, warnung? }` (bzw. `{ ok:false, fehler }`,
