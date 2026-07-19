@@ -1,14 +1,16 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.6.0
-// @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle und Mapster und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
+// @version      0.7.0
+// @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
 // @match        https://*.googleusercontent.com/*
 // @match        https://flagle-game.com/*
 // @match        https://globle-game.com/*
 // @match        https://mapster.teuteuf.fr/*
+// @match        https://travle.earth/*
+// @match        https://geozee.earth/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -70,6 +72,90 @@
       if (document.visibilityState === 'hidden') schnappschuss();
     });
     return; // auf der Spiel-Domain gibt es sonst nichts zu tun
+  }
+
+  // ---- Travle (travle.earth): Schnappschuss wie Flagle/Mapster ----
+  // travle-past-games enthält pro Spiel {gameId, guesses, minGuesses, won,
+  // numHints, perfect}; das heutige Spiel ist der Eintrag mit gameId ==
+  // puzzleIx aus travle-game-state (nur wenn kein Archiv-Modus).
+  if (location.hostname === 'travle.earth') {
+    const sichern = function () {
+      try {
+        const state = JSON.parse(localStorage.getItem('travle-game-state') || 'null');
+        if (!state || state.isArchiveMode) return;
+        const vergangene = JSON.parse(localStorage.getItem('travle-past-games') || 'null');
+        let spiel = null;
+        if (vergangene && Array.isArray(vergangene.games)) {
+          for (const g of vergangene.games) {
+            if (g.gameId === state.puzzleIx) spiel = g;
+          }
+        }
+        GM_setValue('travle', {
+          puzzleIx: state.puzzleIx,
+          gameProgress: state.gameProgress,
+          spiel: spiel,
+          stand: Date.now(),
+        });
+      } catch (e) { /* defekter State – nächstes Ereignis versucht es erneut */ }
+    };
+    sichern();
+    setTimeout(sichern, 4000); // Nachzügler für asynchron eintreffende Daten
+    window.addEventListener('blur', sichern);
+    window.addEventListener('pagehide', sichern);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') sichern();
+    });
+    return;
+  }
+
+  // ---- Geozee (geozee.earth): Schnappschuss, kein Sync ----
+  // geozee:game:<JJJJ-MM-TT> = {date, total, firstScore?, bestScore?,
+  // replayCount?, finished, ...}. Konvention: der erste Versuch zählt –
+  // firstScore, falls die Seite Replays kennt; ältere Einträge haben nur total.
+  if (location.hostname === 'geozee.earth') {
+    const sichern = function () {
+      try {
+        const heute = heuteBerlin();
+        const spiel = JSON.parse(localStorage.getItem('geozee:game:' + heute) || 'null');
+        if (spiel && spiel.finished) {
+          GM_setValue('geozee', {
+            tag: heute,
+            score: (typeof spiel.firstScore === 'number') ? spiel.firstScore : spiel.total,
+            stand: Date.now(),
+          });
+        }
+      } catch (e) { /* defekter State – nächstes Ereignis versucht es erneut */ }
+    };
+    sichern();
+    setTimeout(sichern, 4000);
+    window.addEventListener('blur', sichern);
+    window.addEventListener('pagehide', sichern);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') sichern();
+    });
+    return;
+  }
+
+  // Travle zählt Rätsel durch: 2026-07-19 = puzzleIx 1313 (Anker, per Dump belegt)
+  function travlePuzzleIx(datumISO) {
+    const teile = datumISO.split('-').map(Number);
+    return 1313 + Math.round((Date.UTC(teile[0], teile[1] - 1, teile[2]) - Date.UTC(2026, 6, 19)) / 86400000);
+  }
+
+  // Travle-Konvention: perfect (Länder in richtiger Reihenfolge) → -1,
+  // sonst guesses − minGuesses; verloren/unfertig → leer.
+  function travleErgebnis(heute) {
+    const s = GM_getValue('travle', null);
+    if (!s || s.puzzleIx !== travlePuzzleIx(heute)) return null;
+    const g = s.spiel;
+    if (!g || !g.won) return null;
+    return { wert: g.perfect ? -1 : g.guesses - g.minGuesses };
+  }
+
+  function geozeeErgebnis(heute) {
+    const s = GM_getValue('geozee', null);
+    if (!s || s.tag !== heute) return null;
+    return { wert: s.score };
   }
 
   // ---- Mapster (mapster.teuteuf.fr): Teuteuf-Sync in den localStorage ----
@@ -273,6 +359,8 @@
       geodecide: null, geopaint: null, geodle: null,
       flagle: flagleErgebnis(heute),
       mapster: mapsterErgebnis(heute),
+      travle: travleErgebnis(heute),
+      geozee: geozeeErgebnis(heute),
       globle: null,
     };
     const fehler = [];

@@ -54,6 +54,16 @@ auch wenn dort nicht gespielt wurde.
    (Direkter API-Abruf wäre `auth.teuteuf.fr/api/getdata`, ist aber nicht
    per einfachem GET zugänglich – 404, vermutlich POST + Token.)
 
+   **Travle** (travle.earth): Schnappschuss-Brücke. Heutiges Spiel =
+   `travle-past-games`-Eintrag mit `gameId == puzzleIx` aus
+   `travle-game-state` (Archiv-Modus wird ignoriert; Anker: puzzleIx 1313 =
+   2026-07-19). Wert: `perfect` (Länder in richtiger Reihenfolge) → **-1**,
+   sonst `guesses − minGuesses`; verloren/unfertig → leer.
+
+   **Geozee** (geozee.earth, kein Sync): Schnappschuss-Brücke.
+   `geozee:game:<JJJJ-MM-TT>` mit `finished:true`; Wert = `firstScore`
+   (falls vorhanden – der erste Versuch zählt, Replays egal), sonst `total`.
+
    **Globle** (globle-game.com, Trainwreck-Labs-Login): Die synchronisierte
    Statistik ist über die **öffentliche** API `/account?email=…` abrufbar –
    ohne Cookie, funktioniert auf jedem Rechner. Die Login-E-Mail merkt sich
