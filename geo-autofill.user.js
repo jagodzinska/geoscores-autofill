@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.9.0
+// @version      0.9.1
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
@@ -58,26 +58,39 @@
   // spätestens der Wechsel zum Formular löst also einen Schnappschuss aus).
   if (location.hostname === 'flagle-game.com') {
     let letzterStand = null;
-    const schnappschuss = function () {
+    const schnappschuss = function (anlass) {
       try {
         const raw = localStorage.getItem('flagle-state');
-        if (!raw || raw === letzterStand) return;
+        if (!raw) {
+          console.warn('[Flagle] (' + anlass + ') kein localStorage-Schlüssel "flagle-state" – wurde heute schon ein Spiel gestartet? Vorhandene flagle-Schlüssel:',
+            Object.keys(localStorage).filter(function (k) { return /flagle/i.test(k); }));
+          return;
+        }
+        if (raw === letzterStand) return; // unverändert seit letztem Sichern
         letzterStand = raw;
         const st = JSON.parse(raw);
-        GM_setValue('flagle', {
+        const eintrag = {
           dayNumber: st.dayNumber,
           versuche: (st.guesses || []).length,
           win: !!st.win,
           hardMode: !!st.hardMode,
           stand: Date.now(),
-        });
-      } catch (e) { /* defekter State – nächstes Ereignis versucht es erneut */ }
+        };
+        GM_setValue('flagle', eintrag);
+        console.log('[Flagle] (' + anlass + ') Schnappschuss gesichert:', eintrag,
+          '(erwarteter dayNumber für heute Berlin:', flagleDayNumber(heuteBerlin()) + ')');
+        if (eintrag.dayNumber == null) {
+          console.warn('[Flagle] Achtung: State enthält keinen dayNumber – Format geändert? Roh-State-Schlüssel:', Object.keys(st));
+        }
+      } catch (e) {
+        console.error('[Flagle] (' + anlass + ') Schnappschuss fehlgeschlagen (defekter State?):', e);
+      }
     };
-    schnappschuss();
-    window.addEventListener('blur', schnappschuss);
-    window.addEventListener('pagehide', schnappschuss);
+    schnappschuss('Seitenladen');
+    window.addEventListener('blur', function () { schnappschuss('blur'); });
+    window.addEventListener('pagehide', function () { schnappschuss('pagehide'); });
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'hidden') schnappschuss();
+      if (document.visibilityState === 'hidden') schnappschuss('versteckt');
     });
     return; // auf der Spiel-Domain gibt es sonst nichts zu tun
   }
@@ -309,9 +322,26 @@
   //     privaten Fenster gespielt und landet nicht in diesem localStorage)
   function flagleErgebnis(heute) {
     const s = GM_getValue('flagle', null);
-    if (!s || s.dayNumber !== flagleDayNumber(heute)) return null;
+    const erwartet = flagleDayNumber(heute);
+    if (!s) {
+      console.warn('[Flagle] null: kein Schnappschuss im Tampermonkey-Speicher. '
+        + 'Wurde Flagle in DIESEM Browser (mit diesem Userscript) auf flagle-game.com gespielt? '
+        + 'Andere Domain (www.-Subdomain, flagle.io o. Ä.) würde vom @match nicht erfasst.');
+      return null;
+    }
+    if (s.dayNumber !== erwartet) {
+      const alterMin = s.stand ? Math.round((Date.now() - s.stand) / 60000) : null;
+      console.warn('[Flagle] null: Schnappschuss ist für einen anderen Tag. '
+        + 'gespeicherter dayNumber=' + s.dayNumber + ', erwartet (heute Berlin ' + heute + ')=' + erwartet + '. '
+        + (alterMin != null ? 'Schnappschuss ist ' + alterMin + ' Min alt. ' : '')
+        + 'Ursache: entweder nicht heute gespielt, oder Tagesgrenze/Zeitzone weicht ab.', s);
+      return null;
+    }
     if (s.win && s.versuche >= 1) return { wert: s.versuche, versuche: s.versuche, win: true };
     if (!s.win && s.versuche >= 6) return { wert: 7, versuche: s.versuche, win: false };
+    console.warn('[Flagle] null: Schnappschuss ist von heute, aber nicht eindeutig auswertbar. '
+      + 'win=' + s.win + ', versuche=' + s.versuche + '. '
+      + 'Bekannter Grenzfall: verloren mit <6 sichtbaren Versuchen (6. Versuch evtl. im privaten Fenster gespielt).', s);
     return null;
   }
 
