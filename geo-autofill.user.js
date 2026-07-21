@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.9.1
+// @version      0.10.0
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
@@ -60,25 +60,44 @@
     let letzterStand = null;
     const schnappschuss = function (anlass) {
       try {
+        const erwartet = flagleDayNumber(heuteBerlin());
+        // Das win-Flag im State ist unzuverlässig: Bei deaktivierten
+        // Animationen setzt das Spiel es nie (der localStorage-Write hängt
+        // im setTimeout des Animations-Zweigs – Bug im Spiel). Die
+        // Statistik-Buckets (flagle-statistics.guesses: 1–6, X) werden
+        // dagegen bei Spielende immer synchron hochgezählt und sonst nie
+        // angefasst. Solange der State noch vom Vortag ist, ist die
+        // Statistik also der Stand VOR dem heutigen Spiel – als Baseline
+        // gesichert erlaubt sie der Auswertung den Tages-Diff.
+        let buckets = null;
+        try {
+          const stats = JSON.parse(localStorage.getItem('flagle-statistics'));
+          if (stats && stats.guesses) buckets = stats.guesses;
+        } catch (e) { /* defekte Statistik – dann eben ohne Diff */ }
         const raw = localStorage.getItem('flagle-state');
+        if (buckets && (!raw || JSON.parse(raw).dayNumber !== erwartet)) {
+          GM_setValue('flagle-stats-baseline', { fuerTag: erwartet, buckets: buckets, stand: Date.now() });
+        }
         if (!raw) {
           console.warn('[Flagle] (' + anlass + ') kein localStorage-Schlüssel "flagle-state" – wurde heute schon ein Spiel gestartet? Vorhandene flagle-Schlüssel:',
             Object.keys(localStorage).filter(function (k) { return /flagle/i.test(k); }));
           return;
         }
-        if (raw === letzterStand) return; // unverändert seit letztem Sichern
-        letzterStand = raw;
+        const kombi = raw + '\n' + JSON.stringify(buckets);
+        if (kombi === letzterStand) return; // unverändert seit letztem Sichern
+        letzterStand = kombi;
         const st = JSON.parse(raw);
         const eintrag = {
           dayNumber: st.dayNumber,
           versuche: (st.guesses || []).length,
           win: !!st.win,
           hardMode: !!st.hardMode,
+          buckets: buckets,
           stand: Date.now(),
         };
         GM_setValue('flagle', eintrag);
         console.log('[Flagle] (' + anlass + ') Schnappschuss gesichert:', eintrag,
-          '(erwarteter dayNumber für heute Berlin:', flagleDayNumber(heuteBerlin()) + ')');
+          '(erwarteter dayNumber für heute Berlin:', erwartet + ')');
         if (eintrag.dayNumber == null) {
           console.warn('[Flagle] Achtung: State enthält keinen dayNumber – Format geändert? Roh-State-Schlüssel:', Object.keys(st));
         }
@@ -339,10 +358,43 @@
     }
     if (s.win && s.versuche >= 1) return { wert: s.versuche, versuche: s.versuche, win: true };
     if (!s.win && s.versuche >= 6) return { wert: 7, versuche: s.versuche, win: false };
+    const diff = flagleStatistikDiff(s, erwartet);
+    if (diff) {
+      console.log('[Flagle] win-Flag fehlt (Animationen im Spiel deaktiviert?), '
+        + 'aber der Statistik-Diff belegt: Sieg mit ' + diff.versuche + ' Versuchen.');
+      return diff;
+    }
     console.warn('[Flagle] null: Schnappschuss ist von heute, aber nicht eindeutig auswertbar. '
       + 'win=' + s.win + ', versuche=' + s.versuche + '. '
+      + 'Auch der Statistik-Diff konnte nicht entscheiden (Baseline fehlt/veraltet, '
+      + 'Spiel läuft noch, oder Diff unplausibel). '
       + 'Bekannter Grenzfall: verloren mit <6 sichtbaren Versuchen (6. Versuch evtl. im privaten Fenster gespielt).', s);
     return null;
+  }
+
+  // Rückfallebene für das unzuverlässige win-Flag (bei deaktivierten
+  // Animationen setzt das Spiel es nie): Tages-Diff der Statistik-Buckets
+  // gegen die Baseline, die der Schnappschuss auf der Spiel-Domain vor dem
+  // ersten Guess des Tages gesichert hat. Nur ein exakt plausibles Ergebnis
+  // zählt – genau ein Bucket um genau 1 gewachsen und passend zur Guess-Zahl
+  // im State; alles andere (Uhr verstellt, Storage zurückgespielt) → null.
+  // Kein Diff heißt: Spiel läuft noch (Denkpause zählt nicht als Sieg).
+  function flagleStatistikDiff(s, erwartet) {
+    const basis = GM_getValue('flagle-stats-baseline', null);
+    if (!basis || basis.fuerTag !== erwartet || !basis.buckets || !s.buckets) return null;
+    let gewachsen = null;
+    for (const k of ['1', '2', '3', '4', '5', '6', 'X']) {
+      const d = (s.buckets[k] || 0) - (basis.buckets[k] || 0);
+      if (d === 0) continue;
+      if (d !== 1 || gewachsen !== null) return null;
+      gewachsen = k;
+    }
+    if (gewachsen === null) return null;
+    // 'X' (verloren) hätte 6 Guesses im State und wäre oben schon als 7
+    // gewertet worden – hier wäre es ein Widerspruch, ebenso eine Bucket-
+    // Nummer, die nicht zur Guess-Zahl passt.
+    if (Number(gewachsen) !== s.versuche) return null;
+    return { wert: s.versuche, versuche: s.versuche, win: true };
   }
 
   // Next.js liefert die Seitendaten in mehreren self.__next_f.push([1,"..."])-

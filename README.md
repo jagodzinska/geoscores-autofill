@@ -44,6 +44,14 @@ auch wenn dort nicht gespielt wurde.
    Tag-Validierung über `dayNumber` (Anker: 2026-07-19 = Tag 1587).
    Mapping: gewonnen → Versuche; 6 Versuche verloren → 7; 5 Versuche
    verloren → leer (privater 6. Versuch nicht erkennbar).
+   **win-Flag-Bug im Spiel:** Bei deaktivierten Animationen persistiert
+   Flagle `win: true` nie (der Write hängt im setTimeout des
+   Animations-Zweigs). Rückfallebene deshalb: Der Schnappschuss sichert
+   zusätzlich die Statistik-Buckets (`flagle-statistics.guesses`, nur bei
+   Spielende geschrieben) – vor dem ersten Guess des Tages als Baseline
+   (`flagle-stats-baseline`), danach im Eintrag. Genau ein Bucket um genau
+   1 gewachsen und passend zur Guess-Zahl → Sieg erkannt; kein Diff →
+   Spiel läuft noch; unplausibler Diff → leer.
 
    **Mapster** (mapster.teuteuf.fr, Teuteuf-Login): Der Account-Sync befüllt
    `localStorage["mapster-drawings"]` (`{ "JJJJ-MM-TT": {score, hintsUsed} }`)
