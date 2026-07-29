@@ -71,8 +71,16 @@ auch wenn dort nicht gespielt wurde.
    **Travle** (travle.earth): Schnappschuss-Brücke. Heutiges Spiel =
    `travle-past-games`-Eintrag mit `gameId == puzzleIx` aus
    `travle-game-state` (Archiv-Modus wird ignoriert; Anker: puzzleIx 1313 =
-   2026-07-19). Wert: `perfect` (Länder in richtiger Reihenfolge) → **-1**,
-   sonst `guesses − minGuesses`; verloren/unfertig → leer.
+   2026-07-19). Wert: „Perfect" → **-1**, sonst
+   `max(guesses − minGuesses, 0)` (= +0, +1, …); verloren/unfertig → leer.
+   **Stolperfalle:** Das Feld `perfect` allein heißt nicht „Perfect". Travle
+   setzt es beim Spielstart auf `true` und nur dann auf `false`, wenn ein
+   Rateversuch die Kette nicht berührt („Country not connected"). Das Spiel
+   selbst zeigt „Perfect" erst bei `won && guesses === minGuesses && perfect`
+   – und unterscheidet in der Verteilung sauber zwischen Balken 0
+   („Perfect") und Balken 1 („+0"). Genau diese Und-Verknüpfung bildet das
+   Skript ab; bis v0.10.0 wurde `perfect` allein ausgewertet, wodurch auch
+   ein +2-Spiel als -1 im Formular landete (behoben in v0.11.0).
 
    **Geozee** (geozee.earth, kein Sync): Schnappschuss-Brücke.
    `geozee:game:<JJJJ-MM-TT>` mit `finished:true`; Wert = `firstScore`
@@ -106,6 +114,21 @@ auch wenn dort nicht gespielt wurde.
    `{ ok, tag, welt: {wert,score,total}|null, europa, geoconnections,
    geodecide, geopaint, geodle, warnung? }` (bzw. `{ ok:false, fehler }`,
    wenn alle Abrufe scheitern).
+
+## Plausibilitätsnetz (seit v0.11.0)
+
+Direkt vor dem Absenden läuft jeder `wert` gegen `WERTEBEREICHE` – dieselben
+Grenzen, die das Formular in `validate()` prüft (Travle ≥ -1, Flagle 1–7,
+Geoconnections 0–4, …). Was durchfällt (keine endliche Zahl, außerhalb der
+Grenzen), wird mit `console.warn` verworfen und das Feld bleibt leer.
+
+Leitplanke dahinter, entstanden aus dem Travle-Bug: **Sonderwerte brauchen
+einen ausdrücklichen Beleg.** -1 (Travle Perfect), 7 (Flagle verloren) und 6
+(Flagpie verloren) dürfen nur fallen, wenn die Rohdaten sie eindeutig
+hergeben – nie als Default, nie aus einem Feld, das die Spielseite ohnehin
+auf `true` vorbelegt. Fehlt der Beleg oder passt das Format nicht, ist die
+richtige Antwort `null` plus `console.warn`: Ein leeres Feld sieht man beim
+Eintragen, eine stille Falschzahl nicht.
 
 ## Installation
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.10.0
+// @version      0.11.0
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
@@ -194,11 +194,14 @@
         const heute = heuteBerlin();
         const spiel = JSON.parse(localStorage.getItem('geozee:game:' + heute) || 'null');
         if (spiel && spiel.finished) {
-          GM_setValue('geozee', {
-            tag: heute,
-            score: (typeof spiel.firstScore === 'number') ? spiel.firstScore : spiel.total,
-            stand: Date.now(),
-          });
+          const score = (typeof spiel.firstScore === 'number') ? spiel.firstScore : spiel.total;
+          // Lieber nichts sichern als einen Platzhalter: fehlt beides,
+          // hat die Seite ihr Format geändert – das soll auffallen.
+          if (typeof score === 'number') {
+            GM_setValue('geozee', { tag: heute, score: score, stand: Date.now() });
+          } else {
+            console.warn('[Geozee] kein Score im gespeicherten Spiel gefunden', spiel);
+          }
         }
       } catch (e) { /* defekter State – nächstes Ereignis versucht es erneut */ }
     };
@@ -218,14 +221,43 @@
     return 1313 + Math.round((Date.UTC(teile[0], teile[1] - 1, teile[2]) - Date.UTC(2026, 6, 19)) / 86400000);
   }
 
-  // Travle-Konvention: perfect (Länder in richtiger Reihenfolge) → -1,
-  // sonst guesses − minGuesses; verloren/unfertig → leer.
+  // Travle-Konvention der Runde: "Perfect" → -1, sonst die Zusatz-Rätze
+  // (guesses − minGuesses, also +0, +1, …); verloren/unfertig → leer.
+  //
+  // ACHTUNG, Stolperfalle im Spiel-State: das Feld `perfect` allein bedeutet
+  // NICHT "Perfect". Travle setzt es beim Spielstart auf true und nur dann auf
+  // false, wenn ein Rateversuch die Kette nicht berührt ("Country not
+  // connected"). Ein sauber geratenes Spiel mit Umwegen behält also
+  // perfect:true. Das Spiel selbst zeigt "Perfect" erst bei
+  //   won && guesses === minGuesses && perfect
+  // (identisch in der Verteilungs-Grafik: Balken 0 = perfect && extra === 0,
+  // Balken 1 = "+0"). Genau diese Und-Verknüpfung wird hier gespiegelt –
+  // andernfalls landet -1 im Formular, obwohl es nur ein +2 war.
   function travleErgebnis(heute) {
     const s = GM_getValue('travle', null);
-    if (!s || s.puzzleIx !== travlePuzzleIx(heute)) return null;
+    if (!s) {
+      console.warn('[Travle] null: kein Schnappschuss im Tampermonkey-Speicher. '
+        + 'Wurde Travle in DIESEM Browser auf travle.earth gespielt?');
+      return null;
+    }
+    if (s.puzzleIx !== travlePuzzleIx(heute)) {
+      console.warn('[Travle] null: Schnappschuss gehört zu einem anderen Rätsel. '
+        + 'gespeichert puzzleIx=' + s.puzzleIx + ', erwartet (heute Berlin ' + heute + ')='
+        + travlePuzzleIx(heute) + '.', s);
+      return null;
+    }
     const g = s.spiel;
-    if (!g || !g.won) return null;
-    return { wert: g.perfect ? -1 : g.guesses - g.minGuesses };
+    if (!g || !g.won) return null; // verloren oder noch nicht fertig → Feld bleibt leer
+    if (typeof g.guesses !== 'number' || typeof g.minGuesses !== 'number') {
+      console.warn('[Travle] null: guesses/minGuesses fehlen oder sind keine Zahlen – '
+        + 'hat travle.earth das Format von travle-past-games geändert?', g);
+      return null;
+    }
+    const zusatz = Math.max(g.guesses - g.minGuesses, 0);
+    // -1 nur mit ausdrücklichem Beleg: perfect muss echtes true sein
+    // (fehlendes Feld ⇒ kein Beleg ⇒ regulär +0), Umwege schließen es aus.
+    const perfekt = g.perfect === true && zusatz === 0;
+    return { wert: perfekt ? -1 : zusatz, guesses: g.guesses, minGuesses: g.minGuesses, perfect: g.perfect };
   }
 
   function geozeeErgebnis(heute) {
@@ -468,6 +500,47 @@
     });
   }
 
+  // Letztes Netz vor der Antwort ans Formular: dieselben Grenzen, die das
+  // Formular in validate() prüft. Ein Wert, der hier durchfällt, ist kein
+  // Ergebnis, sondern ein Symptom (Spielseite hat ihr Format geändert,
+  // Rechenfehler, undefined in einer Rechnung → NaN). Er wird verworfen statt
+  // eingetragen: ein leeres Feld sieht man, eine stille Falschzahl nicht.
+  // min/max sind bewusst weit – sie sollen Unsinn abfangen, nicht schlechte
+  // Ergebnisse. Kein Eintrag hier ⇒ keine Prüfung möglich ⇒ auffliegen lassen.
+  const WERTEBEREICHE = {
+    welt:           { min: 0 },
+    europa:         { min: 0 },
+    geoconnections: { min: 0, max: 4 },
+    geodecide:      { min: 0, max: 15 },
+    geopaint:       { min: 0, max: 50 },
+    geodle:         { min: 1 },
+    flagle:         { min: 1, max: 7 },
+    flagpie:        { min: 1, max: 6 },
+    globle:         { min: 1 },
+    travle:         { min: -1 },
+    mapster:        { min: 0, max: 1000 },
+    geozee:         { min: 0, max: 900 },
+  };
+
+  function plausibilitaetPruefen(daten) {
+    Object.keys(WERTEBEREICHE).forEach(function (key) {
+      const eintrag = daten[key];
+      if (!eintrag) return;
+      const grenzen = WERTEBEREICHE[key];
+      const w = eintrag.wert;
+      let grund = null;
+      if (typeof w !== 'number' || !isFinite(w)) grund = 'keine endliche Zahl';
+      else if (grenzen.min !== undefined && w < grenzen.min) grund = 'kleiner als ' + grenzen.min;
+      else if (grenzen.max !== undefined && w > grenzen.max) grund = 'größer als ' + grenzen.max;
+      if (grund) {
+        console.warn('[Geo-Autofill] ' + key + ' verworfen: Wert ' + JSON.stringify(w)
+          + ' ist ' + grund + ' – Feld bleibt leer.', eintrag);
+        daten[key] = null;
+      }
+    });
+    return daten;
+  }
+
   function antworten(obj) {
     console.log('[Geo-Autofill] Antwort ans Formular:', obj);
     window.dispatchEvent(new CustomEvent(ANTWORT, { detail: JSON.stringify(obj) }));
@@ -509,7 +582,7 @@
       return { ok: false, fehler: fehler.join(' / ') };
     }
     if (fehler.length > 0) daten.warnung = fehler.join(' / ');
-    return daten;
+    return plausibilitaetPruefen(daten);
   }
 
   function emailAusDetail(detail) {
