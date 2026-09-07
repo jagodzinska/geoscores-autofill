@@ -98,7 +98,9 @@ auch wenn dort nicht gespielt wurde.
 3. Handshake: Das Userscript bestätigt den Empfang sofort (`…-empfangen`
    bzw. `{geoscores:"empfangen"}`), noch vor dem Datenabruf – so
    unterscheidet das Formular „Skript läuft hier nicht" (Warnung nach 2 s)
-   von „Abruf hängt" (Fehler nach 12 s). Beide Seiten loggen mit Präfix
+   von „Abruf hängt" (Fehler nach 25 s – bewusst länger als der
+   Request-Timeout von 20 s im Userscript, sonst gehen langsame, aber
+   erfolgreiche Abrufe verloren). Beide Seiten loggen mit Präfix
    `[Geo-Autofill]` bzw. `[Autofill]` in die Konsole.
 
    **Zwei Transportkanäle** (seit v0.9.0): DOM-Events funktionieren nur,

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.11.0
+// @version      0.11.1
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
@@ -331,7 +331,7 @@
       GM_xmlhttpRequest({
         method: 'GET',
         url: 'https://globle-game.com/account?email=' + encodeURIComponent(email),
-        timeout: 15000,
+        timeout: 20000,
         onload: function (resp) {
           try {
             if (resp.status !== 200) {
@@ -484,12 +484,17 @@
   // GM_xmlhttpRequest umgeht CORS und schickt die geotrivia-Cookies des
   // Browsers mit (Session + Zeitzone) – wir bekommen also genau die Seite,
   // die der eingeloggte Nutzer auch im Tab sehen würde.
+  //
+  // timeout gilt pro Request; die Abrufe laufen parallel, der Worst Case für
+  // den Gesamtlauf ist also einmal diese Frist. Sie ist an den Abbruch im
+  // Formular gekoppelt (autofillTimer, 25 s) und muss darunter bleiben –
+  // sonst verwirft das Formular Antworten, die gleich noch gekommen wären.
   function holeSeite(url) {
     return new Promise(function (resolve, reject) {
       GM_xmlhttpRequest({
         method: 'GET',
         url: url,
-        timeout: 15000,
+        timeout: 20000,
         onload: function (resp) {
           if (resp.status === 200) resolve(resp.responseText);
           else reject(new Error('HTTP ' + resp.status + ' bei ' + url));
