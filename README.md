@@ -63,7 +63,7 @@ auch wenn dort nicht gespielt wurde.
    per einfachem GET zugänglich – 404, vermutlich POST + Token.)
 
    **Flagpie** (flagpie.net): Schnappschuss-Brücke.
-   `flagpieGameState_<JJJJMMTT>` mit `isOver:true`; Wert = `guessesUsed`
+   `flagpieGameState_<JJJJMMTT>` (eingeloggt mit Suffix `_u<User-ID>`) mit `isOver:true`; Wert = `guessesUsed`
    bei Sieg, **6** bei Niederlage (5 echte Versuche, der 6. Formularwert
    ist der Verloren-Fall). Supabase-Backend existiert, aber der
    Access-Token läuft stündlich ab → localStorage ist robuster.

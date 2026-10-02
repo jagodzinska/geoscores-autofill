@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.11.1
+// @version      0.11.2
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
@@ -115,15 +115,20 @@
   }
 
   // ---- Flagpie (flagpie.net): Schnappschuss ----
-  // flagpieGameState_<JJJJMMTT> = {guessesUsed, isOver, isWon, ...}.
+  // flagpieGameState_<JJJJMMTT> = {guessesUsed, isOver, isWon, ...}; mit
+  // Account-Login hängt das Spiel _u<User-ID> an den Schlüssel an.
   // (Es gäbe ein Supabase-Backend, aber dessen Access-Token läuft stündlich
   // ab – der Schnappschuss ist robuster.)
   if (location.hostname === 'flagpie.net') {
     const sichern = function () {
       try {
         const heute = heuteBerlin();
-        const spiel = JSON.parse(localStorage.getItem('flagpieGameState_' + heute.replace(/-/g, '')) || 'null');
-        if (spiel && spiel.isOver) {
+        const praefix = 'flagpieGameState_' + heute.replace(/-/g, '');
+        const spiel = Object.keys(localStorage)
+          .filter(function (k) { return k === praefix || k.indexOf(praefix + '_u') === 0; })
+          .map(function (k) { return JSON.parse(localStorage.getItem(k) || 'null'); })
+          .find(function (s) { return s && s.isOver; });
+        if (spiel) {
           GM_setValue('flagpie', {
             tag: heute,
             versuche: spiel.guessesUsed,
