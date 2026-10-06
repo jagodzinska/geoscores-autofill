@@ -20,7 +20,7 @@ auch wenn dort nicht gespielt wurde.
    DOM-Event `geoscores-autofill-anfrage`.
 2. Userscript (läuft im Apps-Script-Sandbox-iframe): holt pro Spiel die
    geotrivia-Seite (jede bettet nur ihr eigenes `serverGameResult` ein;
-   georankle, geoconnections, geodecide, geopaint, geodle – parallel), setzt
+   georankle, geoconnections, geodecide, geopaint, geosize, geodle – parallel), setzt
    jeweils den `self.__next_f.push`-Stream zusammen und parst
    `gameType":"<spiel>","score":…,"total":…,"day":"JJJJ-MM-TT[::europe]"`.
    Nur Einträge mit dem heutigen Berlin-Datum zählen.
@@ -33,6 +33,7 @@ auch wenn dort nicht gespielt wurde.
    | geoconnections | Fehler = 4 − `data.lives`                   |
    | geodecide      | `score` = Level (0–15)                      |
    | geopaint       | `score` (Dezimalzahl, z. B. 35.89)          |
+   | geosize        | `score` (Dezimalzahl, 0–50: 5 Runden à 10)  |
    | geodle         | `data.guesses` = Versuche                   |
 
    **Flagle** (flagle-game.com) hat keinen Account: Das Skript läuft auch auf
@@ -114,7 +115,7 @@ auch wenn dort nicht gespielt wurde.
    fängt der Timer-Guard im Formular ab.
 4. Antwort per Event `geoscores-autofill-antwort`, detail = JSON-String:
    `{ ok, tag, welt: {wert,score,total}|null, europa, geoconnections,
-   geodecide, geopaint, geodle, warnung? }` (bzw. `{ ok:false, fehler }`,
+   geodecide, geopaint, geosize, geodle, warnung? }` (bzw. `{ ok:false, fehler }`,
    wenn alle Abrufe scheitern).
 
 ## Plausibilitätsnetz (seit v0.11.0)
