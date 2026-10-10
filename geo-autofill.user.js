@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.12.0
+// @version      0.13.0
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, GeoSize, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
@@ -453,7 +453,7 @@
   //
   // Wertermittlung fürs Formular ("wert"):
   //   georankle      score direkt (Europa-Modus: day = "…::europe")
-  //   geodecide      score = erreichtes Level (0–15)
+  //   geodecide      score + Restleben (0–18), siehe geodecideWert()
   //   geopaint       score = Punkte, Dezimalzahl (z. B. 35.89)
   //   geosize        score = Punkte, Dezimalzahl (5 Runden à max. 10)
   //   geoconnections Fehler = 4 − data.lives (score wäre: gelöste Gruppen)
@@ -471,10 +471,15 @@
       const total = parseFloat(m[3]);
       // data-Block folgt direkt auf den Treffer – Fenster reicht für lives/guesses
       const rest = stream.slice(m.index, m.index + 800);
+      // GeoDecide braucht den ganzen Block: die history ist länger als das
+      // Fenster. Ende = nächster Ergebnis-Eintrag (oder Stream-Ende).
+      const naechster = stream.indexOf('gameType', m.index + 8);
+      const block = stream.slice(m.index, naechster === -1 ? stream.length : naechster);
       if (typ === 'georankle') {
         ziel[tag === heute + '::europe' ? 'europa' : 'welt'] = { wert: score, score: score, total: total };
       } else if (typ === 'geodecide') {
-        ziel.geodecide = { wert: score, score: score, total: total };
+        const wert = geodecideWert(block, score);
+        if (wert !== null) ziel.geodecide = { wert: wert, score: score, total: total };
       } else if (typ === 'geopaint') {
         ziel.geopaint = { wert: score, score: score, total: total };
       } else if (typ === 'geosize') {
@@ -487,6 +492,27 @@
         if (guesses) ziel.geodle = { wert: parseInt(guesses[1], 10), score: score, total: total };
       }
     }
+  }
+
+  // GeoDecide hat drei Leben; jedes unverbrauchte zählt als Bonuspunkt:
+  // wert = score + (3 − Fehler). score ist die Zahl der beantworteten Runden
+  // (inkl. der falschen), also 15 + 3 = 18 für einen fehlerfreien Durchlauf
+  // und 15 + 0, wenn das dritte Leben erst in der letzten Runde draufgeht.
+  // Wer vorher rausfliegt, hat alle Leben verbraucht → Bonus 0.
+  // Die Fehler stehen nirgends als Zahl (data.lives ist konstant 3), sondern
+  // nur als wasCorrect:false in data.history. Passt die Zahl der history-
+  // Einträge nicht zu score, wurde der Block nicht sauber erwischt → null.
+  const GEODECIDE_LEBEN = 3;
+  function geodecideWert(block, score) {
+    const richtig = (block.match(/wasCorrect\\?":true/g) || []).length;
+    const falsch = (block.match(/wasCorrect\\?":false/g) || []).length;
+    if (richtig + falsch !== score) {
+      console.warn('[GeoDecide] null: history passt nicht zu score. score=' + score
+        + ', richtig=' + richtig + ', falsch=' + falsch
+        + '. Hat die Seite ihr Format geändert?');
+      return null;
+    }
+    return score + Math.max(0, GEODECIDE_LEBEN - falsch);
   }
 
   // GM_xmlhttpRequest umgeht CORS und schickt die geotrivia-Cookies des
@@ -524,7 +550,7 @@
     welt:           { min: 0 },
     europa:         { min: 0 },
     geoconnections: { min: 0, max: 4 },
-    geodecide:      { min: 0, max: 15 },
+    geodecide:      { min: 0, max: 18 },
     geopaint:       { min: 0, max: 50 },
     geosize:        { min: 0, max: 50 },
     geodle:         { min: 1 },

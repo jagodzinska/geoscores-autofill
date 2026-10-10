@@ -31,7 +31,7 @@ auch wenn dort nicht gespielt wurde.
    |----------------|---------------------------------------------|
    | georankle      | `score` (Welt bzw. `day`-Suffix `::europe`) |
    | geoconnections | Fehler = 4 − `data.lives`                   |
-   | geodecide      | `score` = Level (0–15)                      |
+   | geodecide      | `score` + Restleben (0–18: 15 Runden + 3)   |
    | geopaint       | `score` (Dezimalzahl, z. B. 35.89)          |
    | geosize        | `score` (Dezimalzahl, 0–50: 5 Runden à 10)  |
    | geodle         | `data.guesses` = Versuche                   |
