@@ -96,6 +96,14 @@ auch wenn dort nicht gespielt wurde.
    heutigen Berlin-Tag → letzter Eintrag von `stats.usedGuesses` = Versuche;
    sonst leer (heute noch nicht gelöst).
 
+   **Reborder** (reborder.app, Account-Login): `GET
+   /api/daily-results?date=<JJJJ-MM-TT>` mit den Browser-Cookies (wie die
+   geotrivia-Abrufe) liefert `{record: {date, challengeNumber, results:
+   [{pairId, score}]}}`; ohne Login 401. Wert = Summe der 4 Rundenscores
+   (0–100 je Runde, also 0–400) – genau so rechnet die Seite selbst. Das
+   Tagesdatum ist bei Reborder das lokale Browserdatum (hier Berlin). Kein
+   `record`, anderer Tag oder ≠ 4 Runden → leer.
+
 3. Handshake: Das Userscript bestätigt den Empfang sofort (`…-empfangen`
    bzw. `{geoscores:"empfangen"}`), noch vor dem Datenabruf – so
    unterscheidet das Formular „Skript läuft hier nicht" (Warnung nach 2 s)
@@ -115,7 +123,7 @@ auch wenn dort nicht gespielt wurde.
    fängt der Timer-Guard im Formular ab.
 4. Antwort per Event `geoscores-autofill-antwort`, detail = JSON-String:
    `{ ok, tag, welt: {wert,score,total}|null, europa, geoconnections,
-   geodecide, geopaint, geosize, geodle, warnung? }` (bzw. `{ ok:false, fehler }`,
+   geodecide, geopaint, geosize, geodle, …, reborder, warnung? }` (bzw. `{ ok:false, fehler }`,
    wenn alle Abrufe scheitern).
 
 ## Plausibilitätsnetz (seit v0.11.0)

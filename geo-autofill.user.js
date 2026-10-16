@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.13.0
-// @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, GeoSize, Geodle), die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
+// @version      0.14.0
+// @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, GeoSize, Geodle), das Reborder-Ergebnis aus dem eingeloggten reborder.app-Account, die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
 // @homepageURL  https://greasyfork.org/de/scripts/587742-geo-scores-autofill
@@ -19,6 +19,7 @@
 // @grant        GM_getValue
 // @connect      geotrivia.com
 // @connect      globle-game.com
+// @connect      reborder.app
 // ==/UserScript==
 
 (function () {
@@ -364,6 +365,58 @@
     });
   }
 
+  // ---- Reborder (reborder.app): Account-API ----
+  // GET /api/daily-results?date=JJJJ-MM-TT liefert mit Login-Cookie
+  // {record: {date, challengeNumber, results: [{pairId, score}, …]}, …};
+  // ohne Login 401. Das Tagesdatum ist auf der Seite das lokale Datum des
+  // Browsers – hier also Berlin. Gesamtpunkte = Summe der Rundenscores, so
+  // rechnet auch die Seite (4 Runden à 0–100). GM_xmlhttpRequest schickt die
+  // reborder.app-Cookies des Browsers mit. Löst immer auf, wie Globle.
+  const REBORDER_RUNDEN = 4;
+  function reborderErgebnis(heute) {
+    return new Promise(function (resolve) {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: 'https://reborder.app/api/daily-results?date=' + heute + '&timezone=Europe%2FBerlin',
+        timeout: 20000,
+        onload: function (resp) {
+          try {
+            if (resp.status === 401) {
+              resolve({ eintrag: null, fehler: 'Reborder: nicht eingeloggt (einmal auf reborder.app anmelden)' });
+              return;
+            }
+            if (resp.status === 404) {
+              resolve({ eintrag: null }); // heute noch nicht gespielt
+              return;
+            }
+            if (resp.status !== 200) {
+              resolve({ eintrag: null, fehler: 'Reborder: HTTP ' + resp.status });
+              return;
+            }
+            const rec = (JSON.parse(resp.responseText) || {}).record;
+            if (!rec) {
+              resolve({ eintrag: null }); // heute noch nicht gespielt
+              return;
+            }
+            const runden = rec.results;
+            if (rec.date !== heute || !Array.isArray(runden) || runden.length !== REBORDER_RUNDEN
+                || !runden.every(function (r) { return r && typeof r.score === 'number'; })) {
+              console.warn('[Reborder] null: Eintrag unerwartet (anderer Tag, unfertig oder Format geändert?)', rec);
+              resolve({ eintrag: null });
+              return;
+            }
+            const summe = runden.reduce(function (s, r) { return s + r.score; }, 0);
+            resolve({ eintrag: { wert: summe, runden: runden.map(function (r) { return r.score; }), nummer: rec.challengeNumber } });
+          } catch (e) {
+            resolve({ eintrag: null, fehler: 'Reborder: ' + String(e) });
+          }
+        },
+        onerror: function () { resolve({ eintrag: null, fehler: 'Reborder: Netzwerkfehler' }); },
+        ontimeout: function () { resolve({ eintrag: null, fehler: 'Reborder: Zeitüberschreitung' }); },
+      });
+    });
+  }
+
   // Flagle zählt Tage durch: 2026-07-19 = Tag 1587 (Anker, per Dump belegt)
   function flagleDayNumber(datumISO) {
     const teile = datumISO.split('-').map(Number);
@@ -560,6 +613,7 @@
     travle:         { min: -1 },
     mapster:        { min: 0, max: 1000 },
     geozee:         { min: 0, max: 900 },
+    reborder:       { min: 0, max: 400 },
   };
 
   function plausibilitaetPruefen(daten) {
@@ -601,6 +655,7 @@
       travle: travleErgebnis(heute),
       geozee: geozeeErgebnis(heute),
       globle: null,
+      reborder: null,
     };
     const fehler = [];
 
@@ -614,6 +669,10 @@
     });
     aufgaben.push(globleErgebnis(heute, formularEmail).then(function (res) {
       daten.globle = res.eintrag;
+      if (res.fehler) fehler.push(res.fehler);
+    }));
+    aufgaben.push(reborderErgebnis(heute).then(function (res) {
+      daten.reborder = res.eintrag;
       if (res.fehler) fehler.push(res.fehler);
     }));
     await Promise.all(aufgaben);
