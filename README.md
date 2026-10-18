@@ -143,5 +143,11 @@ Eintragen, eine stille Falschzahl nicht.
 
 ## Installation
 
-`geo-autofill.user.js` in Tampermonkey/Violentmonkey importieren
-(Greasyfork-Veröffentlichung ausstehend).
+Bei installiertem Tampermonkey diese URL im Browser öffnen — der Installations-
+Dialog geht dann von selbst auf:
+
+<https://raw.githubusercontent.com/jagodzinska/geoscores-autofill/main/geo-autofill.user.js>
+
+`@updateURL`/`@downloadURL` zeigen auf dieselbe Datei, Tampermonkey holt sich
+Updates also automatisch von `main`. Dafür muss die `@version` im Header bei
+jeder Änderung hochgezählt werden.

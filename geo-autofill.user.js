@@ -1,11 +1,14 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.14.0
+// @version      0.14.1
 // @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, GeoSize, Geodle), das Reborder-Ergebnis aus dem eingeloggten reborder.app-Account, die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
-// @homepageURL  https://greasyfork.org/de/scripts/587742-geo-scores-autofill
+// @homepageURL  https://github.com/jagodzinska/geoscores-autofill
+// @supportURL   https://github.com/jagodzinska/geoscores-autofill/issues
+// @downloadURL  https://raw.githubusercontent.com/jagodzinska/geoscores-autofill/main/geo-autofill.user.js
+// @updateURL    https://raw.githubusercontent.com/jagodzinska/geoscores-autofill/main/geo-autofill.user.js
 // @match        https://script.google.com/*
 // @match        https://*.googleusercontent.com/*
 // @match        https://flagle-game.com/*
