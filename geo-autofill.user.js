@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Geo Scores Autofill
 // @namespace    jago/geo-autofill
-// @version      0.14.1
-// @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, GeoSize, Geodle), das Reborder-Ergebnis aus dem eingeloggten reborder.app-Account, die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
+// @version      0.15.0
+// @description  Brücke fürs Geo-Scores-Formular: holt auf Klick des Zauberstabs die heutigen Ergebnisse aus dem eingeloggten geotrivia.com-Account (GeoRankle Welt + Europa, Geoconnections, GeoDecide, GeoPaint, GeoSize, GeoRoute, Geodle), das Reborder-Ergebnis aus dem eingeloggten reborder.app-Account, die Globle-Statistik (öffentliche Account-API) sowie die lokalen Spielstände von Flagle, Flagpie, Mapster, Travle und Geozee und reicht sie ans Formular durch. Läuft im Apps-Script-Sandbox-iframe (googleusercontent.com) und als Spielstand-Sammler auf den Spiel-Domains.
 // @author       jago/claude
 // @license      MIT
 // @homepageURL  https://github.com/jagodzinska/geoscores-autofill
@@ -41,7 +41,7 @@
 
   // Jede geotrivia-Spielseite bettet nur ihr eigenes serverGameResult ein,
   // deshalb ein Abruf pro Spiel (laufen parallel).
-  const SPIELSEITEN = ['georankle', 'geoconnections', 'geodecide', 'geopaint', 'geosize', 'geodle'];
+  const SPIELSEITEN = ['georankle', 'geoconnections', 'geodecide', 'geopaint', 'geosize', 'georoute', 'geodle'];
 
   function heuteBerlin() {
     // en-CA liefert das ISO-Format JJJJ-MM-TT
@@ -512,6 +512,7 @@
   //   geodecide      score + Restleben (0–18), siehe geodecideWert()
   //   geopaint       score = Punkte, Dezimalzahl (z. B. 35.89)
   //   geosize        score = Punkte, Dezimalzahl (5 Runden à max. 10)
+  //   georoute       score = Punkte (0–5: übrige Versuche + 1, nicht angekommen = 0)
   //   geoconnections Fehler = 4 − data.lives (score wäre: gelöste Gruppen)
   //   geodle         data.guesses = Versuche (score wäre: gewonnen 0/1)
   // Nur Einträge mit dem heutigen Berlin-Datum zählen.
@@ -540,6 +541,8 @@
         ziel.geopaint = { wert: score, score: score, total: total };
       } else if (typ === 'geosize') {
         ziel.geosize = { wert: score, score: score, total: total };
+      } else if (typ === 'georoute') {
+        ziel.georoute = { wert: score, score: score, total: total };
       } else if (typ === 'geoconnections') {
         const lives = /lives\\?":(\d+)/.exec(rest);
         if (lives) ziel.geoconnections = { wert: 4 - parseInt(lives[1], 10), score: score, total: total };
@@ -609,6 +612,7 @@
     geodecide:      { min: 0, max: 18 },
     geopaint:       { min: 0, max: 50 },
     geosize:        { min: 0, max: 50 },
+    georoute:       { min: 0, max: 5 },
     geodle:         { min: 1 },
     flagle:         { min: 1, max: 7 },
     flagpie:        { min: 1, max: 6 },
@@ -651,7 +655,7 @@
     const daten = {
       ok: true, tag: heute,
       welt: null, europa: null, geoconnections: null,
-      geodecide: null, geopaint: null, geosize: null, geodle: null,
+      geodecide: null, geopaint: null, geosize: null, georoute: null, geodle: null,
       flagle: flagleErgebnis(heute),
       flagpie: flagpieErgebnis(heute),
       mapster: mapsterErgebnis(heute),
